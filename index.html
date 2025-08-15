@@ -207,7 +207,7 @@
     <script>
         const textInputsContainer = document.getElementById('textInputsContainer');
         const downloadAllZipButton = document.getElementById('downloadAllZipButton');
-        const resetButton = document.getElementById('resetButton'); // Novo botão
+        const resetButton = document.getElementById('resetButton');
         const generatedImagesDisplay = document.getElementById('generatedImagesDisplay');
         const noImagesMessage = document.getElementById('noImagesMessage');
         const lightThemeBtn = document.getElementById('light-theme-btn');
@@ -215,10 +215,10 @@
         const systemThemeBtn = document.getElementById('system-theme-btn');
 
         const predefinedImageUrl = "https://i.imgur.com/je8XhfE.png";
-        const numberOfTextFields = 9; // Limite total de caixas de texto
-
+        const maxTextFields = 9; // Número máximo de campos de texto
         let generatedCanvases = [];
-        let preloadedImage = null; // Variável para a imagem pré-carregada
+        let preloadedImage = null;
+        let themeCount = 0; // Contador para saber quantos temas já foram adicionados
 
         /**
          * Função para "deixar de lado" as ações por um curto período de tempo.
@@ -233,22 +233,19 @@
                 timer = setTimeout(() => { func.apply(this, args); }, timeout);
             };
         };
-
-        // Cria uma versão "debounced" da função de geração de imagem
-        const debouncedGenerateImage = debounce((textarea, index) => {
-            generateImageForInput(textarea, index);
-        });
+        
+        // Cache para armazenar as funções debounced para cada textarea
+        const debouncedFunctions = new Map();
 
         /**
          * Adiciona um novo campo de texto dinamicamente ao contêiner.
-         * @param {number} index - O índice do campo de texto (começando em 1).
          */
-        function addTextField(index) {
-            // Se o número de campos já atingiu o limite, não adiciona mais.
-            if (index > numberOfTextFields) {
+        function addTextField() {
+            if (themeCount >= maxTextFields) {
                 return;
             }
-
+            themeCount++;
+            const index = themeCount;
             const newGroupId = `text-input-group-${index}`;
             const newTextareaId = `overlayText-${index}`;
             
@@ -264,22 +261,31 @@
 
             const textarea = newGroup.querySelector('textarea');
             
-            // Adiciona o listener para a geração de imagem debounced
+            // Cria e armazena a função debounced para esta textarea
+            const debouncedGenerate = debounce(() => {
+                generateImageForInput(textarea, index);
+            });
+            debouncedFunctions.set(textarea, debouncedGenerate);
+
+            // Listener principal para a geração de imagem (debounced)
             textarea.addEventListener('input', () => {
-                debouncedGenerateImage(textarea, index);
+                // Chama a função debounced específica para esta textarea
+                debouncedFunctions.get(textarea)();
             });
 
-            // Adiciona um listener separado para a adição de novas caixas, sem debounce
-            textarea.addEventListener('input', () => {
-                const text = textarea.value.trim();
+            // NOVO! Listener para o evento de foco que adiciona a próxima caixa de forma assíncrona
+            textarea.addEventListener('focus', () => {
                 const allTextareas = textInputsContainer.querySelectorAll('textarea');
-                // Se a caixa atual for a última e tiver conteúdo, adiciona a próxima
-                if (text !== '' && index === allTextareas.length) {
-                    addTextField(index + 1);
+                // Se o foco está no último campo e ainda não atingimos o limite
+                if (textarea === allTextareas[allTextareas.length - 1] && allTextareas.length < maxTextFields) {
+                    // Usa setTimeout com 0ms para adiar a operação e evitar travamento da UI
+                    setTimeout(() => {
+                        addTextField();
+                    }, 0);
                 }
             });
         }
-
+        
         /**
          * Ajusta o tamanho da fonte e quebra o texto para caber na área de desenho.
          * @param {CanvasRenderingContext2D} ctx - O contexto do canvas.
@@ -397,14 +403,11 @@
                 generatedImagesDisplay.appendChild(imagePlaceholder);
             }
 
-            // Se o texto estiver vazio, remove apenas a imagem e o canvas do array
             if (text === '') {
-                // Remove a imagem do array de canvases para o ZIP
                 generatedCanvases = generatedCanvases.filter(item => item.name !== `Tema ${themeNumber}.png`);
-                imagePlaceholder.innerHTML = ''; // Limpa o conteúdo do placeholder
-                imagePlaceholder.style.display = 'none'; // Esconde o placeholder
+                imagePlaceholder.innerHTML = '';
+                imagePlaceholder.style.display = 'none';
 
-                // Se não houver mais imagens visíveis, mostra a mensagem de placeholder
                 const visibleImages = generatedImagesDisplay.querySelectorAll('.generated-image-item:not([style*="display: none"])');
                 if (visibleImages.length === 0) {
                     noImagesMessage.classList.remove('hidden');
@@ -413,14 +416,15 @@
             }
             
             noImagesMessage.classList.add('hidden');
-            imagePlaceholder.style.display = 'flex'; // Garante que o placeholder esteja visível
-            // Exibe um spinner enquanto a imagem é gerada
-            imagePlaceholder.innerHTML = '<div class="spinner mx-auto my-8"></div>';
+            imagePlaceholder.style.display = 'flex';
             
+            // Exibe o spinner imediatamente para feedback visual instantâneo
+            imagePlaceholder.innerHTML = '<div class="spinner mx-auto my-8"></div>';
+
+            // Geração da imagem em segundo plano
             const canvas = generateImageWithText(text);
 
             if (canvas) {
-                // Adiciona ou atualiza o canvas no array para o download ZIP
                 const existingIndex = generatedCanvases.findIndex(item => item.name === `Tema ${themeNumber}.png`);
                 if (existingIndex !== -1) {
                     generatedCanvases[existingIndex] = { canvas: canvas, name: `Tema ${themeNumber}.png` };
@@ -429,6 +433,10 @@
                 }
 
                 const imageDataUrl = canvas.toDataURL('image/png');
+                
+                const contentWrapper = document.createElement('div');
+                contentWrapper.className = 'flex flex-col items-center';
+
                 const imgElement = document.createElement('img');
                 imgElement.src = imageDataUrl;
                 imgElement.alt = `Imagem Gerada ${index}`;
@@ -440,20 +448,20 @@
                 downloadLink.download = `Tema ${themeNumber}.png`;
                 downloadLink.textContent = 'Baixar Imagem Individual';
                 downloadLink.className = "bg-[var(--button-bg)] hover:bg-[var(--button-hover-bg)] text-white font-bold py-2 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-[var(--button-focus-ring)] focus:ring-offset-2 focus:ring-offset-[var(--main-container-bg)] transition duration-300 ease-in-out transform hover:scale-105 w-full text-center mt-4";
-
+                
+                contentWrapper.appendChild(imgElement);
+                contentWrapper.appendChild(downloadLink);
 
                 imagePlaceholder.innerHTML = '';
-                imagePlaceholder.appendChild(imgElement);
-                imagePlaceholder.appendChild(downloadLink);
+                imagePlaceholder.appendChild(contentWrapper);
                 
             } else {
-                imagePlaceholder.remove();
+                imagePlaceholder.innerHTML = ''; // Limpa o placeholder se houver erro
             }
         }
         
         downloadAllZipButton.addEventListener('click', async () => {
             if (generatedCanvases.length === 0) {
-                // Use uma modal personalizada em vez de alert()
                 showCustomAlert('Por favor, gere as imagens primeiro antes de tentar baixar o ZIP.');
                 return;
             }
@@ -476,7 +484,6 @@
                 saveAs(content, zipFileName);
             } catch (error) {
                 console.error("Erro ao gerar o arquivo ZIP:", error);
-                // Use uma modal personalizada em vez de alert()
                 showCustomAlert('Ocorreu um erro ao gerar o arquivo ZIP. Por favor, tente novamente.');
             } finally {
                 downloadAllZipButton.textContent = originalButtonText;
@@ -484,48 +491,32 @@
             }
         });
         
-        // --- Lógica do Botão de Limpar Tudo ---
         resetButton.addEventListener('click', () => {
-            // Limpa o contêiner de inputs de texto
             textInputsContainer.innerHTML = '';
-            // Limpa o contêiner de imagens geradas
             generatedImagesDisplay.innerHTML = '';
-            // Mostra a mensagem de "Nenhuma imagem" novamente
             noImagesMessage.classList.remove('hidden');
-            // Limpa o array de canvases gerados
             generatedCanvases = [];
-            // Recomeça o processo adicionando o primeiro campo de texto
-            addTextField(1);
+            themeCount = 0; // Reseta o contador
+            addTextField(); // Adiciona o primeiro campo de volta
         });
 
-        // --- Lógica do Seletor de Tema ---
-        /**
-         * Aplica o tema selecionado à página e salva a preferência no localStorage.
-         * @param {string} theme - O nome do tema ('light', 'dark', 'system').
-         */
         function applyTheme(theme) {
             const root = document.documentElement;
             localStorage.setItem('theme', theme);
             
-            // Remove as classes de tema existentes para evitar conflitos
             root.classList.remove('light-theme', 'dark-theme');
             
-            // Aplica a classe do tema selecionado
             if (theme === 'dark') {
                 root.classList.add('dark-theme');
             } else if (theme === 'light') {
                 root.classList.add('light-theme');
             }
-            // Para o tema 'system', nenhuma classe específica é adicionada.
-            // O CSS com `@media (prefers-color-scheme: dark)` cuidará da aplicação do tema correto.
         }
 
-        // Adiciona listeners para os botões do seletor de tema
         lightThemeBtn.addEventListener('click', () => applyTheme('light'));
         darkThemeBtn.addEventListener('click', () => applyTheme('dark'));
         systemThemeBtn.addEventListener('click', () => applyTheme('system'));
         
-        // Listener para mudanças no tema do sistema
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
             const savedTheme = localStorage.getItem('theme');
             if (savedTheme === 'system') {
@@ -533,17 +524,11 @@
             }
         });
         
-        // --- Modal Personalizada para Alertas ---
-        /**
-         * Cria e exibe uma modal de alerta personalizada.
-         * @param {string} message - A mensagem a ser exibida na modal.
-         */
         function showCustomAlert(message) {
             const modalId = 'custom-alert-modal';
             let modal = document.getElementById(modalId);
             
             if (!modal) {
-                // Se a modal não existe, cria ela
                 modal = document.createElement('div');
                 modal.id = modalId;
                 modal.className = 'fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50 transition-opacity duration-300';
@@ -558,45 +543,37 @@
                 `;
                 document.body.appendChild(modal);
 
-                // Adiciona o evento de fechamento
                 document.getElementById('custom-alert-close-btn').addEventListener('click', () => {
                     modal.classList.add('opacity-0');
                     setTimeout(() => modal.remove(), 300);
                 });
             } else {
-                // Se a modal já existe, apenas atualiza a mensagem e mostra
                 document.getElementById('custom-alert-message').textContent = message;
                 modal.classList.remove('opacity-0');
             }
         }
 
-        // Função de configuração inicial da aplicação
         const setupApp = async () => {
-            // Verifica se há um tema salvo no localStorage e o aplica
             const savedTheme = localStorage.getItem('theme');
             if (savedTheme) {
                 applyTheme(savedTheme);
             } else {
-                applyTheme('system'); // Aplica o tema do sistema por padrão se não houver preferência salva
+                applyTheme('system');
             }
 
-            // Pré-carregamento da imagem base
             preloadedImage = new Image();
             preloadedImage.crossOrigin = "Anonymous";
             preloadedImage.src = predefinedImageUrl;
 
-            // Espera a imagem carregar
             await new Promise(resolve => {
                 preloadedImage.onload = () => resolve();
                 preloadedImage.onerror = () => {
                     console.error("Erro ao pré-carregar a imagem base.");
-                    resolve(); // Resolve mesmo com erro para não travar a aplicação
+                    resolve();
                 };
             });
 
-            // Pré-carregamento da fonte
             try {
-                // Otimizado para carregar as fontes de forma assíncrona
                 await document.fonts.load('700 240px Oswald');
                 await document.fonts.load('700 240px Poppins');
                 await document.fonts.load('400 240px Lato');
@@ -604,11 +581,9 @@
                 console.error("Erro ao pré-carregar as fontes:", error);
             }
 
-            // Inicia a aplicação com o primeiro campo de texto
-            addTextField(1);
+            addTextField(); // Adiciona o primeiro campo de texto ao iniciar a página
         };
         
-        // Inicia a configuração da aplicação quando o DOM estiver completamente carregado
         document.addEventListener('DOMContentLoaded', setupApp);
     </script>
 </body>
