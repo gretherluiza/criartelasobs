@@ -223,7 +223,6 @@
         /**
          * Função para "deixar de lado" as ações por um curto período de tempo.
          * Isso evita que a função de geração de imagem seja chamada a cada tecla digitada.
-         * O tempo foi reduzido para 300ms para uma experiência mais ágil.
          * @param {Function} func - A função a ser executada.
          * @param {number} timeout - O tempo de espera em milissegundos.
          */
@@ -235,11 +234,16 @@
             };
         };
 
+        // Cria uma versão "debounced" da função de geração de imagem
+        const debouncedGenerateImage = debounce((textarea, index) => {
+            generateImageForInput(textarea, index);
+        });
+
         /**
          * Adiciona um novo campo de texto dinamicamente ao contêiner.
          * @param {number} index - O índice do campo de texto (começando em 1).
          */
-        async function addTextField(index) {
+        function addTextField(index) {
             // Se o número de campos já atingiu o limite, não adiciona mais.
             if (index > numberOfTextFields) {
                 return;
@@ -259,13 +263,21 @@
             textInputsContainer.appendChild(newGroup);
 
             const textarea = newGroup.querySelector('textarea');
-            // Adiciona um listener para o evento 'input' usando a função debounce
-            textarea.addEventListener('input', debounce(() => {
-                generateImageForInput(textarea, index);
-            }));
             
-            // Gerar a imagem inicial para o novo campo de texto, caso ele já tenha conteúdo (útil no reset)
-            await generateImageForInput(textarea, index);
+            // Adiciona o listener para a geração de imagem debounced
+            textarea.addEventListener('input', () => {
+                debouncedGenerateImage(textarea, index);
+            });
+
+            // Adiciona um listener separado para a adição de novas caixas, sem debounce
+            textarea.addEventListener('input', () => {
+                const text = textarea.value.trim();
+                const allTextareas = textInputsContainer.querySelectorAll('textarea');
+                // Se a caixa atual for a última e tiver conteúdo, adiciona a próxima
+                if (text !== '' && index === allTextareas.length) {
+                    addTextField(index + 1);
+                }
+            });
         }
 
         /**
@@ -368,7 +380,6 @@
         
         /**
          * Gera a imagem para um campo de input específico e atualiza a exibição.
-         * Também adiciona uma nova caixa de texto se a atual for a última.
          * @param {HTMLTextAreaElement} textarea - O elemento de textarea que disparou o evento.
          * @param {number} index - O índice do campo de texto.
          */
@@ -386,31 +397,23 @@
                 generatedImagesDisplay.appendChild(imagePlaceholder);
             }
 
-            // Se o texto estiver vazio, remove a imagem e o campo de texto se não for o último
+            // Se o texto estiver vazio, remove apenas a imagem e o canvas do array
             if (text === '') {
                 // Remove a imagem do array de canvases para o ZIP
                 generatedCanvases = generatedCanvases.filter(item => item.name !== `Tema ${themeNumber}.png`);
-                imagePlaceholder.remove(); // Remove o elemento por completo para limpeza
+                imagePlaceholder.innerHTML = ''; // Limpa o conteúdo do placeholder
+                imagePlaceholder.style.display = 'none'; // Esconde o placeholder
 
-                // Verifica se deve remover a caixa de texto vazia
-                const allTextareas = textInputsContainer.querySelectorAll('textarea');
-                const isLastTextarea = index === allTextareas.length;
-                if (isLastTextarea && index > 1) { // Só remove se não for a primeira caixa
-                     // Encontra o container do último textarea
-                    const lastContainer = document.getElementById(`text-input-group-${index}`);
-                    if(lastContainer) {
-                        lastContainer.remove();
-                    }
-                }
-                
-                // Se não houver mais imagens, mostra a mensagem de placeholder
-                if (generatedImagesDisplay.children.length === 0) {
+                // Se não houver mais imagens visíveis, mostra a mensagem de placeholder
+                const visibleImages = generatedImagesDisplay.querySelectorAll('.generated-image-item:not([style*="display: none"])');
+                if (visibleImages.length === 0) {
                     noImagesMessage.classList.remove('hidden');
                 }
                 return;
             }
             
             noImagesMessage.classList.add('hidden');
+            imagePlaceholder.style.display = 'flex'; // Garante que o placeholder esteja visível
             // Exibe um spinner enquanto a imagem é gerada
             imagePlaceholder.innerHTML = '<div class="spinner mx-auto my-8"></div>';
             
@@ -443,18 +446,8 @@
                 imagePlaceholder.appendChild(imgElement);
                 imagePlaceholder.appendChild(downloadLink);
                 
-                // Adiciona uma nova caixa de texto se a atual for a última e tiver conteúdo
-                const allTextareas = textInputsContainer.querySelectorAll('textarea');
-                if (index === allTextareas.length && text.trim() !== '') {
-                    await addTextField(index + 1);
-                }
-                
             } else {
                 imagePlaceholder.remove();
-            }
-
-            if (generatedImagesDisplay.children.length === 0) {
-                noImagesMessage.classList.remove('hidden');
             }
         }
         
@@ -613,13 +606,10 @@
 
             // Inicia a aplicação com o primeiro campo de texto
             addTextField(1);
-            // Chama a função de geração de imagem para o campo 1, mesmo que esteja vazio inicialmente
-            await generateImageForInput(document.querySelector('textarea'), 1);
         };
         
         // Inicia a configuração da aplicação quando o DOM estiver completamente carregado
         document.addEventListener('DOMContentLoaded', setupApp);
-
     </script>
 </body>
 </html>
