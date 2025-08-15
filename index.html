@@ -16,16 +16,16 @@
         /* Estilos CSS para variáveis de tema e tipografia */
         /* Variáveis para o tema escuro moderno */
         :root {
-            --bg-color: #1d1934; /* Fundo roxo escuro para o tema escuro */
-            --main-container-bg: #1e293b; /* Slate 800 */
+            --bg-color: #1b1c1d; /* Fundo roxo escuro para o tema escuro */
+            --main-container-bg: #2f3032; /* Cor para as caixas do tema escuro */
             --text-color: #f8fafc; /* Slate 50 */
-            --input-bg: #334155; /* Slate 700 */
+            --input-bg: #2f3032; /* Cor para as caixas do tema escuro */
             --input-text-color: #cbd5e1; /* Slate 300 */
-            --generated-area-bg: #1e293b; /* Slate 800 */
-            --button-bg: #7d5aff; /* Roxo vibrante */
-            --button-hover-bg: #6a46e1; /* Roxo mais escuro para hover */
-            --button-focus-ring: #7d5aff; /* Roxo vibrante */
-            --border-color: #334155; /* Slate 700 */
+            --generated-area-bg: #2f3032; /* Cor para as caixas do tema escuro */
+            --button-bg: #9b59b6; /* Roxo avermelhado */
+            --button-hover-bg: #8e44ad; /* Roxo mais escuro para hover */
+            --button-focus-ring: #9b59b6; /* Roxo avermelhado */
+            --border-color: #434446; /* Cinza escuro para o tema escuro */
         }
         
         /* Tema claro moderno (pode ser ativado pelo seletor de tema) */
@@ -36,9 +36,9 @@
             --input-bg: #f8fafc; /* Slate 50 */
             --input-text-color: #475569; /* Slate 600 */
             --generated-area-bg: #f8fafc; /* Slate 50 */
-            --button-bg: #9b59b6; /* Outro tom de roxo */
-            --button-hover-bg: #8e44ad; /* Outro tom de roxo para hover */
-            --button-focus-ring: #9b59b6; /* Outro tom de roxo */
+            --button-bg: #9b59b6; /* Roxo avermelhado */
+            --button-hover-bg: #8e44ad; /* Roxo mais escuro para hover */
+            --button-focus-ring: #9b59b6; /* Roxo avermelhado */
             --border-color: #e2e8f0; /* Slate 200 */
         }
 
@@ -101,6 +101,29 @@
             border-color: var(--border-color);
             transition: background-color 0.3s, color 0.3s, border-color 0.3s;
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Estilos para os botões do seletor de tema */
+        .theme-switcher-btn {
+            background-color: var(--main-container-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            transition: all 0.3s ease;
+        }
+        .theme-switcher-btn:hover {
+            transform: scale(1.05);
+            background-color: var(--border-color);
+        }
+        /* Estilo para o botão de tema ativo */
+        .active-theme-btn {
+            background-color: var(--button-bg);
+            color: white;
+            box-shadow: 0 0 10px var(--button-bg), 0 0 20px var(--button-bg);
+            transform: scale(1.1);
+        }
+        .active-theme-btn:hover {
+            background-color: var(--button-hover-bg);
+            transform: scale(1.15);
         }
 
         /* Estilos para a área de imagens geradas */
@@ -166,9 +189,9 @@
 
     <!-- Seletor de Tema (Theme Switcher) movido para o canto superior direito -->
     <div id="themeSwitcher" class="fixed top-4 right-4 z-10 flex space-x-2">
-        <button id="light-theme-btn" class="bg-gray-100 text-gray-800 p-2 rounded-lg shadow-md transition-all duration-300 hover:bg-gray-200">Claro</button>
-        <button id="dark-theme-btn" class="bg-gray-800 text-white p-2 rounded-lg shadow-md transition-all duration-300 hover:bg-gray-700">Escuro</button>
-        <button id="system-theme-btn" class="bg-gray-500 text-white p-2 rounded-lg shadow-md transition-all duration-300 hover:bg-gray-600">Sistema</button>
+        <button id="light-theme-btn" class="theme-switcher-btn p-2 rounded-lg shadow-md">Claro</button>
+        <button id="dark-theme-btn" class="theme-switcher-btn p-2 rounded-lg shadow-md">Escuro</button>
+        <button id="system-theme-btn" class="theme-switcher-btn p-2 rounded-lg shadow-md">Sistema</button>
     </div>
     
     <!-- Contêiner principal para centralizar e limitar a largura do conteúdo -->
@@ -499,24 +522,47 @@
             themeCount = 0; // Reseta o contador
             addTextField(); // Adiciona o primeiro campo de volta
         });
+        
+        /**
+         * Atualiza o estado visual dos botões de tema.
+         * @param {string} activeTheme - O nome do tema ativo ('light', 'dark' ou 'system').
+         */
+        function updateActiveThemeButton(activeTheme) {
+            const buttons = document.querySelectorAll('.theme-switcher-btn');
+            buttons.forEach(btn => btn.classList.remove('active-theme-btn'));
+            
+            if (activeTheme === 'light') {
+                lightThemeBtn.classList.add('active-theme-btn');
+            } else if (activeTheme === 'dark') {
+                darkThemeBtn.classList.add('active-theme-btn');
+            } else if (activeTheme === 'system') {
+                systemThemeBtn.classList.add('active-theme-btn');
+            }
+        }
 
+        /**
+         * Aplica o tema selecionado à página.
+         * @param {string} theme - O nome do tema ('light', 'dark' ou 'system').
+         */
         function applyTheme(theme) {
             const root = document.documentElement;
             localStorage.setItem('theme', theme);
             
             root.classList.remove('light-theme', 'dark-theme');
             
-            if (theme === 'dark') {
+            if (theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
                 root.classList.add('dark-theme');
-            } else if (theme === 'light') {
+            } else {
                 root.classList.add('light-theme');
             }
+            updateActiveThemeButton(theme);
         }
 
         lightThemeBtn.addEventListener('click', () => applyTheme('light'));
         darkThemeBtn.addEventListener('click', () => applyTheme('dark'));
         systemThemeBtn.addEventListener('click', () => applyTheme('system'));
         
+        // Listener para mudanças no tema do sistema
         window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
             const savedTheme = localStorage.getItem('theme');
             if (savedTheme === 'system') {
