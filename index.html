@@ -209,6 +209,11 @@
             </div>
 
             <div class="flex justify-center mb-6 gap-4">
+                <!-- Novo botão de instruções -->
+                <button id="instructionsButton"
+                        class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 focus:ring-offset-[var(--main-container-bg)] transition duration-300 ease-in-out transform hover:scale-105 w-full md:w-auto">
+                    Instruções
+                </button>
                 <button id="resetButton"
                         class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2 focus:ring-offset-[var(--main-container-bg)] transition duration-300 ease-in-out transform hover:scale-105 w-full md:w-auto">
                     Limpar Tudo
@@ -231,6 +236,7 @@
         const textInputsContainer = document.getElementById('textInputsContainer');
         const downloadAllZipButton = document.getElementById('downloadAllZipButton');
         const resetButton = document.getElementById('resetButton');
+        const instructionsButton = document.getElementById('instructionsButton'); // Novo botão
         const generatedImagesDisplay = document.getElementById('generatedImagesDisplay');
         const noImagesMessage = document.getElementById('noImagesMessage');
         const lightThemeBtn = document.getElementById('light-theme-btn');
@@ -310,62 +316,7 @@
         }
         
         /**
-         * Ajusta o tamanho da fonte e quebra o texto para caber na área de desenho.
-         * @param {CanvasRenderingContext2D} ctx - O contexto do canvas.
-         * @param {string} text - O texto a ser ajustado.
-         * @param {number} boxWidth - Largura da caixa de texto.
-         * @param {number} boxHeight - Altura da caixa de texto.
-         * @param {number} initialFontSizePt - Tamanho da fonte inicial em 'pt'.
-         * @returns {{fontSize: number, lines: string[]}} - O tamanho da fonte final e as linhas de texto.
-         */
-        function adjustFontSizeForCanvas(ctx, text, boxWidth, boxHeight, initialFontSizePt) {
-            let fontSize = initialFontSizePt;
-            let lines = [];
-            const minAllowedFontSizePt = 8;
-
-            const wrapText = (context, textToWrap, maxWidth) => {
-                const words = textToWrap.split(' ');
-                let line = '';
-                let testLine = '';
-                let lineArray = [];
-
-                for (let n = 0; n < words.length; n++) {
-                    testLine = line + words[n] + ' ';
-                    const metrics = context.measureText(testLine);
-                    const testWidth = metrics.width;
-
-                    if (testWidth > maxWidth && n > 0) {
-                        lineArray.push(line.trim());
-                        line = words[n] + ' ';
-                    } else {
-                        line = testLine;
-                    }
-                }
-                lineArray.push(line.trim());
-                return lineArray;
-            };
-
-            while (fontSize >= minAllowedFontSizePt) {
-                ctx.font = `bold ${fontSize}pt Oswald`;
-                lines = wrapText(ctx, text, boxWidth);
-
-                const textMetrics = ctx.measureText("M");
-                const lineHeight = textMetrics.actualBoundingBoxAscent + textMetrics.actualBoundingBoxDescent + 76;
-                const totalTextHeight = lines.length * lineHeight;
-
-                if (totalTextHeight <= boxHeight) {
-                    break;
-                }
-                fontSize -= 0.5;
-            }
-            if (fontSize < minAllowedFontSizePt) {
-                console.warn(`[adjustFontSizeForCanvas] Fonte atingiu o tamanho mínimo de ${minAllowedFontSizePt}pt e o texto ainda pode não caber.`);
-            }
-            return { fontSize: fontSize, lines: lines };
-        }
-
-        /**
-         * Gera a imagem com texto no canvas usando a imagem pré-carregada.
+         * Gera a imagem com texto no canvas, agora com suporte a sobrescrito e subscrito corrigido.
          * @param {string} text - O texto a ser sobreposto.
          * @returns {HTMLCanvasElement|null} - O canvas gerado ou null em caso de erro.
          */
@@ -391,19 +342,91 @@
             ctx.fillStyle = 'white';
 
             const processedText = text.toUpperCase();
-            const { fontSize, lines } = adjustFontSizeForCanvas(ctx, processedText, boxWidth, boxHeight, 180);
+            
+            const lines = processedText.split('\n');
+            const baseFontSizePt = 180;
+            const superscriptScale = 0.6;
+            const subscriptScale = 0.6;
+            const lineHeight = 1.2; // Espaçamento de linha
 
-            ctx.font = `bold ${fontSize}pt Oswald`;
+            let totalTextWidth = 0;
+            let totalTextHeight = 0;
+            
+            const parsedLines = lines.map(line => {
+                const segments = [];
+                let currentText = '';
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+                    if (char === '^' || char === '_') {
+                        if (currentText.length > 0) {
+                            segments.push({ type: 'normal', text: currentText });
+                            currentText = '';
+                        }
+                        if (i + 1 < line.length) {
+                            const type = char === '^' ? 'superscript' : 'subscript';
+                            segments.push({ type: type, text: line[i + 1] });
+                            i++;
+                        }
+                    } else {
+                        currentText += char;
+                    }
+                }
+                if (currentText.length > 0) {
+                    segments.push({ type: 'normal', text: currentText });
+                }
+                return segments;
+            });
 
-            const textMetrics = ctx.measureText("M");
-            const lineHeight = textMetrics.actualBoundingBoxAscent + textMetrics.actualBoundingBoxDescent + 76;
-            const totalTextHeight = lines.length * lineHeight;
-            let startY = boxTop + (boxHeight - totalTextHeight) / 2 + textMetrics.actualBoundingBoxAscent;
+            parsedLines.forEach(segments => {
+                let lineWidth = 0;
+                segments.forEach(seg => {
+                    let currentFont = '';
+                    if (seg.type === 'superscript') {
+                        currentFont = `bold ${baseFontSizePt * superscriptScale}pt Oswald`;
+                    } else if (seg.type === 'subscript') {
+                        currentFont = `bold ${baseFontSizePt * subscriptScale}pt Oswald`;
+                    } else {
+                        currentFont = `bold ${baseFontSizePt}pt Oswald`;
+                    }
+                    ctx.font = currentFont;
+                    lineWidth += ctx.measureText(seg.text).width;
+                });
+                if (lineWidth > totalTextWidth) {
+                    totalTextWidth = lineWidth;
+                }
+            });
 
-            for (let i = 0; i < lines.length; i++) {
-                ctx.fillText(lines[i], boxLeft, startY + (i * lineHeight));
-            }
+            totalTextHeight = parsedLines.length * baseFontSizePt * lineHeight;
+            
+            let startY = boxTop + (boxHeight - totalTextHeight) / 2;
 
+            parsedLines.forEach((segments, lineIndex) => {
+                let currentX = boxLeft + (boxWidth - totalTextWidth) / 2;
+                let currentY = startY + (lineIndex * baseFontSizePt * lineHeight) + (baseFontSizePt / 2); // Centraliza verticalmente
+                
+                segments.forEach(seg => {
+                    let textHeight = 0;
+                    ctx.font = `bold ${baseFontSizePt}pt Oswald`; // Usa fonte base para calcular altura de referência
+                    textHeight = ctx.measureText("M").width;
+
+                    if (seg.type === 'superscript') {
+                        ctx.font = `bold ${baseFontSizePt * superscriptScale}pt Oswald`;
+                        // Ajuste para posicionar o sobrescrito acima da linha base
+                        ctx.fillText(seg.text, currentX, currentY - textHeight * 0.5);
+                        currentX += ctx.measureText(seg.text).width;
+                    } else if (seg.type === 'subscript') {
+                        ctx.font = `bold ${baseFontSizePt * subscriptScale}pt Oswald`;
+                        // Ajuste para posicionar o subscrito abaixo da linha base (CORRIGIDO)
+                        ctx.fillText(seg.text, currentX, currentY + textHeight * 0.3);
+                        currentX += ctx.measureText(seg.text).width;
+                    } else {
+                        ctx.font = `bold ${baseFontSizePt}pt Oswald`;
+                        ctx.fillText(seg.text, currentX, currentY);
+                        currentX += ctx.measureText(seg.text).width;
+                    }
+                });
+            });
+            
             return canvas;
         }
         
@@ -521,6 +544,11 @@
             generatedCanvases = [];
             themeCount = 0; // Reseta o contador
             addTextField(); // Adiciona o primeiro campo de volta
+        });
+
+        // Adiciona um evento de clique para o novo botão de instruções
+        instructionsButton.addEventListener('click', () => {
+            showCustomAlert('Para texto sobrescrito (ex: $m^2$), use o acento circunflexo (^), como em: m^2. Para texto subscrito (ex: $H_2O$), use o underscore (_), como em: H_2O.');
         });
         
         /**
