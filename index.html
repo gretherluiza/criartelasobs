@@ -316,7 +316,7 @@
         }
         
         /**
-         * Gera a imagem com texto no canvas, agora com suporte a sobrescrito e subscrito corrigido.
+         * Gera a imagem com texto no canvas, agora com suporte a sobrescrito e subscrito corrigido e redimensionamento de fonte.
          * @param {string} text - O texto a ser sobreposto.
          * @returns {HTMLCanvasElement|null} - O canvas gerado ou null em caso de erro.
          */
@@ -340,16 +340,72 @@
             const boxLeft = 0.0229 * canvas.width;
 
             ctx.fillStyle = 'white';
-            ctx.textBaseline = 'middle'; // Centraliza a linha base para um melhor alinhamento vertical
+            ctx.textBaseline = 'middle';
+            ctx.textAlign = 'left'; // Alinha o texto à esquerda
 
             const processedText = text.toUpperCase();
             
-            const lines = processedText.split('\n');
-            const baseFontSizePt = 180;
+            // A partir de agora, o texto será processado para quebra de linha
+            let initialLines = processedText.split('\n');
+            let baseFontSizePt = 180;
             const superscriptScale = 0.6;
             const subscriptScale = 0.6;
+            // Aumenta o espaçamento entre as linhas para melhor legibilidade
+            const lineHeight = 1.7;
 
-            const parsedLines = lines.map(line => {
+            let fontFits = false;
+            let safetyCounter = 0;
+            const maxSafety = 100;
+            let finalLines = [];
+
+            // A nova lógica de quebra de linha e redimensionamento
+            while (!fontFits && safetyCounter < maxSafety) {
+                let currentLines = [];
+                // Para cada linha inicial (separada por \n), a gente aplica a quebra de linha de acordo com o tamanho da fonte
+                initialLines.forEach(line => {
+                    const words = line.split(' ');
+                    let currentLine = words[0];
+                    for (let i = 1; i < words.length; i++) {
+                        const testLine = currentLine + ' ' + words[i];
+                        ctx.font = `bold ${baseFontSizePt}pt Oswald`;
+                        // Mede o texto para ver se cabe na caixa
+                        if (ctx.measureText(testLine).width < boxWidth) {
+                            currentLine = testLine;
+                        } else {
+                            currentLines.push(currentLine);
+                            currentLine = words[i];
+                        }
+                    }
+                    currentLines.push(currentLine);
+                });
+                
+                finalLines = currentLines;
+
+                const totalTextHeight = finalLines.length * baseFontSizePt * lineHeight;
+
+                let longestLineWidth = 0;
+                finalLines.forEach(line => {
+                    ctx.font = `bold ${baseFontSizePt}pt Oswald`;
+                    const lineWidth = ctx.measureText(line).width;
+                    if (lineWidth > longestLineWidth) {
+                        longestLineWidth = lineWidth;
+                    }
+                });
+
+                if (longestLineWidth > boxWidth || totalTextHeight > boxHeight) {
+                    baseFontSizePt -= 5;
+                    if (baseFontSizePt < 10) {
+                        baseFontSizePt = 10;
+                        fontFits = true;
+                    }
+                } else {
+                    fontFits = true;
+                }
+                safetyCounter++;
+            }
+            
+            // Processa as linhas finais para encontrar sobrescritos e subscritos antes de desenhar
+            const parsedLines = finalLines.map(line => {
                 const segments = [];
                 let currentText = '';
                 for (let i = 0; i < line.length; i++) {
@@ -374,29 +430,26 @@
                 return segments;
             });
 
-            // Mede a altura total do texto para centralização vertical
-            const totalTextHeight = parsedLines.length * baseFontSizePt;
+            // Renderiza o texto com o tamanho de fonte final e quebra de linha
+            const totalTextHeight = parsedLines.length * baseFontSizePt * lineHeight;
             const startY = boxTop + (boxHeight - totalTextHeight) / 2;
-
+            
             parsedLines.forEach((segments, lineIndex) => {
-                // CORREÇÃO: Inicia o X na margem esquerda da caixa para alinhamento à esquerda.
                 let currentX = boxLeft; 
-                let currentY = startY + (lineIndex * baseFontSizePt) + (baseFontSizePt / 2);
+                let lineCenterY = startY + (lineIndex * baseFontSizePt * lineHeight) + (baseFontSizePt * lineHeight / 2);
                 
                 segments.forEach(seg => {
                     if (seg.type === 'superscript') {
                         ctx.font = `bold ${baseFontSizePt * superscriptScale}pt Oswald`;
-                        // Posiciona o sobrescrito acima da linha base do texto normal
-                        ctx.fillText(seg.text, currentX, currentY - (baseFontSizePt * 0.4));
+                        ctx.fillText(seg.text, currentX, lineCenterY - (baseFontSizePt * 0.4));
                         currentX += ctx.measureText(seg.text).width;
                     } else if (seg.type === 'subscript') {
                         ctx.font = `bold ${baseFontSizePt * subscriptScale}pt Oswald`;
-                        // Posiciona o subscrito abaixo da linha base do texto normal
-                        ctx.fillText(seg.text, currentX, currentY + (baseFontSizePt * 0.2));
+                        ctx.fillText(seg.text, currentX, lineCenterY + (baseFontSizePt * 0.2));
                         currentX += ctx.measureText(seg.text).width;
                     } else {
                         ctx.font = `bold ${baseFontSizePt}pt Oswald`;
-                        ctx.fillText(seg.text, currentX, currentY);
+                        ctx.fillText(seg.text, currentX, lineCenterY);
                         currentX += ctx.measureText(seg.text).width;
                     }
                 });
