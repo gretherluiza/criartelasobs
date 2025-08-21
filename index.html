@@ -340,6 +340,7 @@
             const boxLeft = 0.0229 * canvas.width;
 
             ctx.fillStyle = 'white';
+            ctx.textBaseline = 'middle'; // Centraliza a linha base para um melhor alinhamento vertical
 
             const processedText = text.toUpperCase();
             
@@ -347,11 +348,7 @@
             const baseFontSizePt = 180;
             const superscriptScale = 0.6;
             const subscriptScale = 0.6;
-            const lineHeight = 1.2; // Espaçamento de linha
 
-            let totalTextWidth = 0;
-            let totalTextHeight = 0;
-            
             const parsedLines = lines.map(line => {
                 const segments = [];
                 let currentText = '';
@@ -377,47 +374,25 @@
                 return segments;
             });
 
-            parsedLines.forEach(segments => {
-                let lineWidth = 0;
-                segments.forEach(seg => {
-                    let currentFont = '';
-                    if (seg.type === 'superscript') {
-                        currentFont = `bold ${baseFontSizePt * superscriptScale}pt Oswald`;
-                    } else if (seg.type === 'subscript') {
-                        currentFont = `bold ${baseFontSizePt * subscriptScale}pt Oswald`;
-                    } else {
-                        currentFont = `bold ${baseFontSizePt}pt Oswald`;
-                    }
-                    ctx.font = currentFont;
-                    lineWidth += ctx.measureText(seg.text).width;
-                });
-                if (lineWidth > totalTextWidth) {
-                    totalTextWidth = lineWidth;
-                }
-            });
-
-            totalTextHeight = parsedLines.length * baseFontSizePt * lineHeight;
-            
-            let startY = boxTop + (boxHeight - totalTextHeight) / 2;
+            // Mede a altura total do texto para centralização vertical
+            const totalTextHeight = parsedLines.length * baseFontSizePt;
+            const startY = boxTop + (boxHeight - totalTextHeight) / 2;
 
             parsedLines.forEach((segments, lineIndex) => {
-                let currentX = boxLeft + (boxWidth - totalTextWidth) / 2;
-                let currentY = startY + (lineIndex * baseFontSizePt * lineHeight) + (baseFontSizePt / 2); // Centraliza verticalmente
+                // CORREÇÃO: Inicia o X na margem esquerda da caixa para alinhamento à esquerda.
+                let currentX = boxLeft; 
+                let currentY = startY + (lineIndex * baseFontSizePt) + (baseFontSizePt / 2);
                 
                 segments.forEach(seg => {
-                    let textHeight = 0;
-                    ctx.font = `bold ${baseFontSizePt}pt Oswald`; // Usa fonte base para calcular altura de referência
-                    textHeight = ctx.measureText("M").width;
-
                     if (seg.type === 'superscript') {
                         ctx.font = `bold ${baseFontSizePt * superscriptScale}pt Oswald`;
-                        // Ajuste para posicionar o sobrescrito acima da linha base
-                        ctx.fillText(seg.text, currentX, currentY - textHeight * 0.5);
+                        // Posiciona o sobrescrito acima da linha base do texto normal
+                        ctx.fillText(seg.text, currentX, currentY - (baseFontSizePt * 0.4));
                         currentX += ctx.measureText(seg.text).width;
                     } else if (seg.type === 'subscript') {
                         ctx.font = `bold ${baseFontSizePt * subscriptScale}pt Oswald`;
-                        // Ajuste para posicionar o subscrito abaixo da linha base (CORRIGIDO)
-                        ctx.fillText(seg.text, currentX, currentY + textHeight * 0.3);
+                        // Posiciona o subscrito abaixo da linha base do texto normal
+                        ctx.fillText(seg.text, currentX, currentY + (baseFontSizePt * 0.2));
                         currentX += ctx.measureText(seg.text).width;
                     } else {
                         ctx.font = `bold ${baseFontSizePt}pt Oswald`;
